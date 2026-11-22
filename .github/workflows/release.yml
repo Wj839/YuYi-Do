@@ -1,0 +1,154 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag name (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prebuild Android
+        run: npx expo prebuild --platform android --non-interactive
+
+      - name: Build Release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Prepare APK artifact
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/yuyi-do-${TAG_NAME}-android.apk"
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/*.apk
+
+  build-ios:
+    name: Build iOS Unsigned IPA
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prebuild iOS
+        run: npx expo prebuild --platform ios --non-interactive
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: Build Unsigned iOS App
+        run: |
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" | head -n 1)
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | awk '/Schemes:/{flag=1; next} flag && NF{print $1; exit}')
+          echo "Using workspace=$WORKSPACE scheme=$SCHEME"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath ios/build \
+            build
+
+      - name: Package Unsigned IPA
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
+          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
+          mkdir -p ios/ipa/Payload dist
+          cp -R "$APP_PATH" ios/ipa/Payload/
+          cd ios/ipa
+          zip -r "../../dist/yuyi-do-${TAG_NAME}-ios-unsigned.ipa" Payload
+
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: dist/*.ipa
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-android, build-ios]
+    if: always() && (needs.build-android.result == 'success' || needs.build-ios.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Android APK
+        if: needs.build-android.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: release-assets
+        continue-on-error: true
+
+      - name: Download iOS IPA
+        if: needs.build-ios.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: release-assets
+        continue-on-error: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: 雨仪待办 ${{ github.event.inputs.tag || github.ref_name }}
+          body: |
+            ## 雨仪待办 (YuYi Do) ${{ github.event.inputs.tag || github.ref_name }}
+
+            ### 安装包说明
+            - **Android**: 下载 `*-android.apk` 直接安装。
+            - **iOS**: 下载 `*-ios-unsigned.ipa`（未签名包，需使用自签名工具如 Sideloadly / AltStore / TrollStore 安装；如需直接分发签名版 `.ipa`，请配置 Apple 开发者证书或 EAS Build）。
+          files: release-assets/*
+          draft: false
+          prerelease: false
