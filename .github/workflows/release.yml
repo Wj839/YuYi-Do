@@ -40,6 +40,11 @@ jobs:
       - name: Prebuild Android
         run: npx expo prebuild --platform android --non-interactive
 
+      - name: Fix Kotlin version for Compose Compiler
+        run: |
+          echo "android.kotlinVersion=1.9.25" >> android/gradle.properties
+          sed -i "s/1.9.24/1.9.25/g" android/build.gradle
+
       - name: Build Release APK
         run: |
           cd android
