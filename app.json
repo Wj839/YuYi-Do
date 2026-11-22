@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "雨仪待办",
+    "slug": "yuyi-do",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "yuyido",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#CBA0FF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yuyi.duodo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.yuyi.duodo",
+      "adaptiveIcon": {
+        "backgroundColor": "#CBA0FF"
+      },
+      "permissions": [
+        "INTERNET"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
