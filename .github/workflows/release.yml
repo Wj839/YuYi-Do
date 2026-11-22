@@ -44,6 +44,7 @@ jobs:
         run: |
           echo "android.kotlinVersion=1.9.25" >> android/gradle.properties
           sed -i "s/1.9.24/1.9.25/g" android/build.gradle
+          sed -i "s/1.9.24/1.9.25/g" node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml
 
       - name: Build Release APK
         run: |
